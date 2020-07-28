@@ -5,7 +5,6 @@ import com.android.build.gradle.internal.scope.VariantScope
 import com.bytedance.android.plugin.model.SigningConfig
 import org.gradle.api.GradleException
 import org.gradle.api.Project
-import org.gradle.internal.impldep.org.eclipse.jgit.errors.NotSupportedException
 import java.io.File
 
 /**
@@ -43,13 +42,13 @@ private fun getSigningConfigForAGP4(agpVersion: String, project: Project, varian
         buildTypes = getBuildTypesForAGP4009(variantManager)
     }
     if (buildTypes == null) {
-        throw NotSupportedException("AGP $agpVersion is not supported, please Please ask for an issue or pull request.")
+        throw IllegalStateException("AGP $agpVersion is not supported, please Please ask for an issue or pull request.")
     }
     val flavor = variantScope.variantData.name
-    val buildTypeData = buildTypes[variantScope.variantData.name]
-            ?: throw GradleException("get buildType failed for $flavor")
+    val buildTypeData = buildTypes[flavor] ?: throw GradleException("get buildType failed for $flavor")
     val buildType = buildTypeData::class.java.getMethod("getBuildType").invoke(buildTypeData)
     val signingConfig = buildType::class.java.getMethod("getSigningConfig").invoke(buildType)
+            ?: throw GradleException("Cannot find signing config for $flavor")
     return invokeSigningConfig(signingConfig)
 }
 
@@ -74,13 +73,13 @@ private fun getBuildTypesForAGP4009(variantManager: VariantManager): Map<*, *>? 
         val variantInputModelField = variantManager::class.java.getDeclaredField("variantInputModel")
         variantInputModelField.isAccessible = true
         val variantInputModel = variantInputModelField.get(variantManager)
-        val buildTypesField = variantInputModel::class.java.getField("buildTypes")
+        val buildTypesField = variantInputModel::class.java.getDeclaredField("buildTypes")
+        buildTypesField.isAccessible = true
         return buildTypesField.get(variantInputModel) as Map<*, *>?
     } catch (e: Exception) {
         null
     }
 }
-
 
 private fun invokeSigningConfig(any: Any): SigningConfig {
     val storeFile: File = any::class.java.getMethod("getStoreFile").invoke(any) as File
